@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Serial Monitor</title>
+    <!-- Materialize CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Chart.js for Plotter -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #f5f5f5;
+        }
+        .container {
+            width: 95%;
+            max-width: 95vw;
+            height: 100vh;
+            overflow-y: auto;
+            /*margin-top: 2%;*/
+        }
+        .card {
+            padding: 10px;
+            padding-top: 5;
+            box-shadow: 0 4px 8px 8px rgba(0,0,0,0.2);
+        }
+        .output-container {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            height: 77vh;
+            padding-bottom: 10px;
+        }
+
+        #output {
+            white-space: pre-wrap;
+            background: #f4f4f4;
+            padding: 10px;
+            border: 5px solid #ffffff;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            font-family: monospace;
+            transition: width 0.2s ease-in-out;
+        }
+
+        #plotter {
+            width: 50%;
+            max-width: 50%;
+            height: 100%;
+            /*border-left: 5px solid #ffffff;*/
+            transition: opacity 0.2s ease-in-out;
+            display: none; /* Completely hidden by default */
+        }
+
+        .plotter-visible #output {
+            width: 50%; /* Shrink output when plotter is visible */
+        }
+
+        .plotter-visible #plotter {
+            display: block; /* Show plotter */
+        }
+        .compact-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .compact-row .input-field {
+            margin: 0;
+            margin-left: 10px;
+            min-width: 125px;
+            flex: 1;
+        }
+        .compact-row .input-fieldx {
+            margin: 0;
+            min-width: 80px;
+            max-width: 100px;
+            flex: 1;
+        }
+        .compact-row .input-fieldx1 {
+            margin: 0;
+            min-width: 60px;
+            max-width: 60px;
+            flex: 1;
+        }
+        .compact-row .input-fieldxx select#fontSizeSelect {
+            font-size: 12px; /* Make dropdown text smaller */
+            height: 30px; /* Adjust height */
+            padding: 0;
+            width: 40px !important; /* Ensure fixed width */
+            min-width: 40px !important; /* Prevent shrinking */
+            max-width: 40px !important; /* Prevent expansion */
+            text-align: center; /* Center-align numbers */
+            text-overflow: ellipsis;
+            appearance: none; /* Remove browser default styling */
+            
+        }
+        /* Expand dropdown menu when clicked */
+        ul#fontSizeDropdown {
+            width: 40px !important; /* Expand only this dropdown */
+            min-width: 40px !important;
+            max-width: 40px !important;
+        }
+        /* Increase font size inside the font selector dropdown menu */
+        #fontSizeSelect {
+            font-family: monospace;
+            font-size: 16px !important; /* Change dropdown text size */
+            flex: 1;
+        }
+
+        /* Style the dropdown menu when opened */
+        #fontSizeSelect option {
+            font-size: 16px !important; /* Ensure font size applies to dropdown items */
+            padding: 5px; /* Improve spacing */
+        }
+        .compact-row .input-fieldxx {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 70px !important;
+            max-width: 70px !important;
+            font-size: 14px;
+            margin-right: 10px;
+            vertical-align: middle !important;
+        }
+        .input-fieldxx label {
+            font-size: 28px !important; /* Adjust the label text size */
+            vertical-align: middle; /* Align with dropdown */
+        }
+
+        .compact-row .btn {
+            margin: 0;
+            position: relative;
+        }
+        .btn .tooltip {
+            visibility: hidden;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%; /* Position above the button */
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .btn:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .btn.active {
+            background-color: #D32F2F; /* Highlight active buttons */
+        }
+        #dataInput {
+            margin: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h4 class="center-align">🔌 Web Serial Monitor</h4>
+
+            <!-- Compact Row for Controls -->
+            <div class="compact-row">
+                <!-- Data Input -->
+                <div class="input-field" style="flex: 2;">
+                    <input id="dataInput" type="text" placeholder="Enter data to send">
+                </div>
+                <button id="sendData" class="btn waves-effect waves-light" disabled title="Send Data">
+                    <i class="material-icons">send</i>
+                </button>
+
+                <!-- Baud Rate -->
+                <div class="input-fieldx">
+                    <select id="baudRate">
+                        <option value="110">110</option>
+                        <option value="300">300</option>
+                        <option value="600">600</option>
+                        <option value="1200">1200</option>
+                        <option value="2400">2400</option>
+                        <option value="4800">4800</option>
+                        <option value="9600" selected>9600</option> <!-- Default selection -->
+                        <option value="14400">14400</option>
+                        <option value="19200">19200</option>
+                        <option value="28800">28800</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="76800">76800</option>
+                        <option value="115200">115200</option>
+                        <option value="128000">128000</option>
+                        <option value="230400">230400</option>
+                        <option value="256000">256000</option>
+                        <option value="460800">460800</option>
+                        <option value="921600">921600</option>
+                        <option value="1000000">1000000</option>
+                        <option value="1500000">1500000</option>
+                        <option value="2000000">2000000</option>
+                        <option value="3000000">3000000</option>
+                        <option value="3500000">3500000</option>
+                        <option value="4000000">4000000</option>
+                    </select>
+                    <label>Baud Rate</label>
+                </div>
+
+                <!-- End of Line -->
+                <div class="input-fieldx1">
+                    <select id="eol">
+                        <option value="none">None</option>
+                        <option value="\n">NL</option>
+                        <option value="\r">CR</option>
+                        <option value="\r\n">NL+CR</option>
+                    </select>
+                    <label>End of Line</label>
+                </div>
+
+                <!-- Control Buttons -->
+                <button id="connectToggle" class="btn waves-effect waves-light">
+                    <i class="material-icons">link</i>
+                </button>
+                <button id="timestamp" class="btn waves-effect waves-light">
+                    <i class="material-icons">access_time</i>
+                </button>
+                <button id="autoScroll" class="btn waves-effect waves-light">
+                    <i class="material-icons">swap_vert</i>
+                </button>
+                <button id="clearOutput" class="btn waves-effect waves-light">
+                    <i class="material-icons">clear</i>
+                </button>
+                <button id="togglePlotter" class="btn waves-effect waves-light">
+                    <i class="material-icons">show_chart</i>
+                </button>
+                <div class="input-fieldxx">
+                    <label>🅰️&nbsp;</label>
+                    <select id="fontSizeSelect" >
+                        <option value="10px">10</option>
+                        <option value="11px">11</option>
+                        <option value="12px" selected>12</option> <!-- Default -->
+                        <option value="14px">14</option>
+                        <option value="16px">16</option>
+                        <option value="18px">18</option>
+                        <option value="20px">20</option>
+                        <option value="24px">24</option>
+                        <option value="30px">30</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="output-container">
+                <pre id="output"></pre>
+                <canvas id="plotter"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Materialize JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            M.AutoInit(); // Initialize Materialize components
+            document.getElementById('plotter').style.display = 'none'; // Ensure the plotter is hidden on page load
+        });
+
+        let port;
+        let reader;
+        let writer;
+        let isPlotterVisible = false;
+        let chart;
+        let isConnected = false;
+
+        const connectToggleButton = document.getElementById('connectToggle');
+        const sendDataButton = document.getElementById('sendData');
+        const output = document.getElementById('output');
+        const baudRateSelect = document.getElementById('baudRate');
+        const eolSelect = document.getElementById('eol');
+        const dataInput = document.getElementById('dataInput');
+        const autoScrollButton = document.getElementById('autoScroll');
+        const clearOutputButton = document.getElementById('clearOutput');
+        const togglePlotterButton = document.getElementById('togglePlotter');
+        const plotterCanvas = document.getElementById('plotter');
+        const timestampButton = document.getElementById('timestamp');
+
+        // Chart.js Setup
+        const chartConfig = {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Serial Data',
+                    data: [],
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    fill: false
+                }]
+            },
+            options: {
+                scales: {
+                    x: { display: true, title: { display: true, text: 'Time' } },
+                    y: { display: true, title: { display: true, text: 'Value' } }
+                }
+            }
+        };
+
+        // Initialize Chart
+        chart = new Chart(plotterCanvas, chartConfig);
+
+        // Toggle Connection
+        connectToggleButton.addEventListener('click', async () => {
+            if (!isConnected) {
+                if (!('serial' in navigator)) {
+                    output.textContent = 'Web Serial API not supported in this browser.';
+                    return;
+                }
+
+                try {
+                    port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: parseInt(baudRateSelect.value) });
+
+                    isConnected = true;
+                    connectToggleButton.innerHTML = '<i class="material-icons">link_off</i><span class="tooltip">Disconnect</span>';
+                    connectToggleButton.title = "Disconnect";
+                    connectToggleButton.style.backgroundColor = "#D32F2F"; // Reddish when connected
+                    sendDataButton.disabled = false;
+
+                    output.textContent = 'Connected to serial port.\n';
+
+                    reader = port.readable.getReader();
+                    writer = port.writable.getWriter();
+
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) {
+                            reader.releaseLock();
+                            break;
+                        }
+                        const text = new TextDecoder().decode(value);
+                        const timestamp = timestampButton.classList.contains('active') ? `[${new Date().toLocaleTimeString()}] ` : '';
+                        output.textContent += timestamp + text;
+
+                        // Update Plotter
+                        if (isPlotterVisible) {
+                            const numericValue = parseFloat(text.trim());
+                            if (!isNaN(numericValue)) {
+                                chart.data.labels.push(new Date().toLocaleTimeString());
+                                chart.data.datasets[0].data.push(numericValue);
+                                if (chart.data.labels.length > 50) {
+                                    chart.data.labels.shift();
+                                    chart.data.datasets[0].data.shift();
+                                }
+                                chart.update();
+                            }
+                        }
+
+                        // Auto-Scroll
+                        if (autoScrollButton.classList.contains('active')) {
+                            output.scrollTop = output.scrollHeight;
+                        }
+                    }
+                } catch (error) {
+                    output.textContent += `Error: ${error.message}\n`;
+                }
+            } else {
+                if (reader) {
+                    await reader.cancel();
+                    reader.releaseLock();
+                    reader = null;
+                }
+
+                if (writer) {
+                    await writer.close();
+                    writer.releaseLock();
+                    writer = null;
+                }
+
+                if (port) {
+                    await port.close();
+                    port = null;
+                }
+
+                isConnected = false;
+                connectToggleButton.innerHTML = '<i class="material-icons">link</i><span class="tooltip">Connect</span>';
+                connectToggleButton.title = "Connect";
+                connectToggleButton.style.backgroundColor = ""; // Default color when disconnected
+                sendDataButton.disabled = true;
+
+                output.textContent += '\nDisconnected from serial port.\n';
+            }
+        });
+
+        // Send Data to Serial Port
+        sendDataButton.addEventListener('click', async () => {
+            if (!writer) return;
+
+            const data = dataInput.value + eolSelect.value;
+            await writer.write(new TextEncoder().encode(data));
+            dataInput.value = '';
+        });
+
+        sendDataButton.addEventListener('mousedown', () => {
+            sendDataButton.style.backgroundColor = "#D32F2F"; // Red when pressed
+        });
+
+        sendDataButton.addEventListener('mouseup', () => {
+            sendDataButton.style.backgroundColor = ""; // Default when released
+        });
+
+        sendDataButton.addEventListener('mouseleave', () => {
+            sendDataButton.style.backgroundColor = ""; // Reset if mouse leaves while pressed
+        });
+
+
+        // Clear Output
+        clearOutputButton.addEventListener('click', () => {
+            output.textContent = '';
+        });
+
+        clearOutputButton.addEventListener('mousedown', () => {
+            clearOutputButton.style.backgroundColor = "#D32F2F"; // Red when pressed
+        });
+
+        clearOutputButton.addEventListener('mouseup', () => {
+            clearOutputButton.style.backgroundColor = ""; // Default when released
+        });
+
+        clearOutputButton.addEventListener('mouseleave', () => {
+            clearOutputButton.style.backgroundColor = ""; // Reset if mouse leaves while pressed
+        });
+
+
+        // Toggle Plotter
+        togglePlotterButton.addEventListener('click', () => {
+            isPlotterVisible = !isPlotterVisible;
+            plotterCanvas.style.display = isPlotterVisible ? 'block' : 'none';
+            togglePlotterButton.classList.toggle('active');
+            const icon = togglePlotterButton.querySelector("i"); 
+            if (isPlotterVisible) {
+                icon.textContent = "bar_chart"; // Use "bar_chart" when plotter is active
+                togglePlotterButton.title = "Hide Plotter";
+                togglePlotterButton.style.backgroundColor = "#D32F2F"; // Reddish color when enabled
+            } else {
+                icon.textContent = "show_chart"; // Default icon
+                togglePlotterButton.title = "Show Plotter";
+                togglePlotterButton.style.backgroundColor = ""; // Default color
+            }
+        });
+
+        // Toggle Timestamp
+        timestampButton.addEventListener('click', () => {
+            timestampButton.classList.toggle('active');
+            const icon = timestampButton.querySelector("i");
+            if (timestampButton.classList.contains('active')) {
+                icon.textContent = "timer"; // Change icon when timestamp is enabled
+                timestampButton.title = "Disable Timestamp";
+                timestampButton.style.backgroundColor = "#D32F2F"; // Reddish color when enabled
+            } else {
+                icon.textContent = "access_time"; // Restore original icon
+                timestampButton.title = "Enable Timestamp";
+                timestampButton.style.backgroundColor = ""; // Default color
+             }
+        });
+
+        // Toggle Auto-Scroll
+        autoScrollButton.addEventListener('click', () => {
+            autoScrollButton.classList.toggle('active');
+            const icon = autoScrollButton.querySelector("i");
+            if (autoScrollButton.classList.contains('active')) {
+                icon.textContent = "vertical_align_bottom"; // Change to a different icon for enabled
+                autoScrollButton.title = "Disable Auto-Scroll";
+                autoScrollButton.style.backgroundColor = "#D32F2F"; // Reddish color when enabled
+            } else {
+                icon.textContent = "swap_vert"; // Change back to original
+                autoScrollButton.title = "Enable Auto-Scroll";
+                autoScrollButton.style.backgroundColor = ""; // Default color
+            }
+        });
+
+        document.getElementById('fontSizeSelect').addEventListener('change', function () {
+            document.getElementById('output').style.fontSize = this.value;
+        });
+
+    </script>
+</body>
+</html>
